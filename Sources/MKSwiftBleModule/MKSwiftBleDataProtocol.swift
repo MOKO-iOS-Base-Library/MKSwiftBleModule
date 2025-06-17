@@ -24,7 +24,7 @@ public enum MKSwiftCentralManagerState {
 }
 
 // MARK: - 通知名称
-extension Notification.Name {
+public extension Notification.Name {
     static let swiftPeripheralConnectStateChanged = Notification.Name("MKSwiftPeripheralConnectStateChangedNotification")
     static let swiftCentralManagerStateChanged = Notification.Name("MKSwiftCentralManagerStateChangedNotification")
 }

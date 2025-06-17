@@ -7,7 +7,7 @@
 
 import Foundation
 
-class MKSwiftBleLogManager {
+public class MKSwiftBleLogManager {
     
     // MARK: - Private Properties
     
@@ -25,7 +25,7 @@ class MKSwiftBleLogManager {
     ///   - dataList: Array of strings to write
     /// - Returns: true if successful, false otherwise
     @discardableResult
-    static func saveData(fileName: String, dataList: [String]) -> Bool {
+    public static func saveData(fileName: String, dataList: [String]) -> Bool {
         guard !fileName.isEmpty, !dataList.isEmpty else {
             return false
         }
@@ -75,7 +75,7 @@ class MKSwiftBleLogManager {
     /// Read data from local file with name "/fileName.txt"
     /// - Parameter fileName: Name of the file to read
     /// - Returns: Data object if successful, nil otherwise
-    static func readData(fileName: String) -> Data? {
+    public static func readData(fileName: String) -> Data? {
         let path = cachesDirectory()
         let localFileName = "/\(fileName).txt"
         let filePath = path + localFileName
@@ -89,7 +89,7 @@ class MKSwiftBleLogManager {
     
     /// Delete local file with name "/fileName.txt"
     /// - Parameter fileName: Name of the file to delete
-    static func deleteLog(fileName: String) {
+    public static func deleteLog(fileName: String) {
         let path = cachesDirectory()
         let localFileName = "/\(fileName).txt"
         let filePath = path + localFileName

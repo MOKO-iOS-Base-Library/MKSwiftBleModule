@@ -8,36 +8,36 @@
 import Foundation
 
 // MARK: - 类型安全验证工具
-struct MKValidator {
+public struct MKValidator {
     /// 验证非空字符串 (替代 MKValidStr)
-    static func isValidString(_ value: Any?) -> Bool {
+    public static func isValidString(_ value: Any?) -> Bool {
         guard let str = value as? String else { return false }
         return !str.isEmpty
     }
     
     /// 验证非空字典 (替代 MKValidDict)
-    static func isValidDictionary(_ value: Any?) -> Bool {
+    public static func isValidDictionary(_ value: Any?) -> Bool {
         guard let dict = value as? [AnyHashable: Any] else { return false }
         return !dict.isEmpty
     }
     
     /// 验证非空数组 (替代 MKValidArray)
-    static func isValidArray(_ value: Any?) -> Bool {
+    public static func isValidArray(_ value: Any?) -> Bool {
         guard let arr = value as? [Any] else { return false }
         return !arr.isEmpty
     }
     
     /// 验证Data对象 (替代 MKValidData)
-    static func isValidData(_ value: Any?) -> Bool {
+    public static func isValidData(_ value: Any?) -> Bool {
         value is Data
     }
 }
 
 // MARK: - 线程安全工具
-enum MKThreadUtils {
+public enum MKThreadUtils {
     /// 主线程安全执行 (替代 MKBLEBase_main_safe)
     @MainActor
-    static func runOnMain(_ block: @escaping @Sendable () -> Void) {
+    public static func runOnMain(_ block: @escaping @Sendable () -> Void) {
         if Thread.isMainThread {
             block()
         } else {

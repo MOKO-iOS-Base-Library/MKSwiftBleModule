@@ -10,9 +10,9 @@ import Foundation
 public extension String {
     // MARK: - Size Calculations
     
-    func bleSubstring(from location: Int, length: Int) -> String? {
+    func bleSubstring(from location: Int, length: Int) -> String {
         guard location >= 0, location < self.count else {
-            return nil
+            return ""
         }
         
         let startIndex = self.index(self.startIndex, offsetBy: location)

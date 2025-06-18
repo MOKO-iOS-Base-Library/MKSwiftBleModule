@@ -7,6 +7,21 @@
 
 import Foundation
 
+public extension String {
+    // MARK: - Size Calculations
+    
+    func bleSubstring(from location: Int, length: Int) -> String? {
+        guard location >= 0, location < self.count else {
+            return nil
+        }
+        
+        let startIndex = self.index(self.startIndex, offsetBy: location)
+        let endIndex = self.index(startIndex, offsetBy: length, limitedBy: self.endIndex) ?? self.endIndex
+        
+        return String(self[startIndex..<endIndex])
+    }
+}
+
 public enum MKSwiftBleError: Error {
     case bluetoothPowerOff
     case connectFailed

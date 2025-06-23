@@ -267,7 +267,7 @@ public class MKSwiftBleSDKAdopter {
         return tempString
     }
     
-    public class func fetchHexValue(_ value: UInt, byteLen len: Int) -> String {
+    public class func fetchHexValue(_ value: Int, byteLen len: Int) -> String {
         if len <= 0 { return "" }
         
         var valueString = String(format: "%1lx", value)

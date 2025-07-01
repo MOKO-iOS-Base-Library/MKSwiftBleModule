@@ -140,34 +140,28 @@ public class MKSwiftBleSDKAdopter {
         return hexStr
     }
     
-    public class func stringToData(_ dataString: String) -> Data {
-        guard MKValidator.isValidString(dataString) else { return Data() }
+    /// Converts a hexadecimal string to `Data`.
+    /// - Note: Supports both even and odd-length strings (e.g., "A1B2" or "ABC").
+    /// - Returns: Empty `Data` if the input string is invalid.
+    public class func stringToData(_ hexString: String) -> Data {
+        guard MKValidator.isValidString(hexString) else { return Data() }
         
-        var hexData = Data()
-        var range: NSRange
+        let chunkSize = hexString.count % 2 == 0 ? 2 : 1
+        var data = Data()
+        data.reserveCapacity((hexString.count + chunkSize - 1) / chunkSize)
         
-        if dataString.count % 2 == 0 {
-            range = NSRange(location: 0, length: 2)
-        } else {
-            range = NSRange(location: 0, length: 1)
+        var index = hexString.startIndex
+        while index < hexString.endIndex {
+            let endIndex = hexString.index(index, offsetBy: chunkSize, limitedBy: hexString.endIndex) ?? hexString.endIndex
+            let substring = String(hexString[index..<endIndex])
+            
+            if let byte = UInt8(substring, radix: 16) {
+                data.append(byte)
+            }
+            index = endIndex
         }
         
-        var index = range.location
-        while index < dataString.count {
-            let endIndex = min(index + range.length, dataString.count)
-            let hexCharStr = (dataString as NSString).substring(with: NSRange(location: index, length: endIndex - index))
-            
-            var anInt: UInt32 = 0
-            Scanner(string: hexCharStr).scanHexInt32(&anInt)
-            
-            var intValue = UInt8(anInt)
-            hexData.append(&intValue, count: 1)
-            
-            index += range.length
-            range.length = 2
-        }
-        
-        return hexData
+        return data
     }
     
     // MARK: - Validation Methods

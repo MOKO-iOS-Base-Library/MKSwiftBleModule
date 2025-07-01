@@ -89,11 +89,11 @@ public class MKSwiftBleLogManager {
     
     /// Delete local file with name "/fileName.txt"
     /// - Parameter fileName: Name of the file to delete
-    public static func deleteLog(fileName: String) {
+    public static func deleteLog(fileName: String) -> Bool {
         let path = cachesDirectory()
         let localFileName = "/\(fileName).txt"
         let filePath = path + localFileName
-        deleteFile(atPath: filePath)
+        return deleteFile(atPath: filePath)
     }
     
     // MARK: - Private Methods

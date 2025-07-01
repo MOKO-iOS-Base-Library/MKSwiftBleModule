@@ -5,6 +5,9 @@ import PackageDescription
 
 let package = Package(
     name: "MKSwiftBleModule",
+    platforms: [
+        .iOS(.v14),  // 明确声明最低支持 iOS 14
+    ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(

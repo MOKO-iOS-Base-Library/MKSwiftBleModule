@@ -8,7 +8,7 @@ enum MKSwiftCurrentAction {
     case connecting
 }
 
-@MainActor final public class MKSwiftBleBaseCentralManager: NSObject {
+public class MKSwiftBleBaseCentralManager: NSObject {
     
     // MARK: - Properties
     
@@ -39,14 +39,14 @@ enum MKSwiftCurrentAction {
         operationQueue.maxConcurrentOperationCount = 1
     }
     
-    public static var shared: MKSwiftBleBaseCentralManager {
+    @MainActor public static var shared: MKSwiftBleBaseCentralManager {
         if _sharedInstance == nil {
             _sharedInstance = MKSwiftBleBaseCentralManager()
         }
         return _sharedInstance!
     }
     
-    public static func singleDealloc() {
+    @MainActor public static func singleDealloc() {
         _sharedInstance = nil
     }
     

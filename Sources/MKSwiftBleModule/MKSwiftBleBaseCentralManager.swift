@@ -8,17 +8,16 @@ enum MKSwiftCurrentAction {
     case connecting
 }
 
-public class MKSwiftBleBaseCentralManager: NSObject {
+@MainActor final public class MKSwiftBleBaseCentralManager: NSObject {
     
     // MARK: - Properties
-    
-    @MainActor public static let shared = MKSwiftBleBaseCentralManager()
     
     public private(set) var centralManager: CBCentralManager!
     public private(set) var managerList = [MKSwiftBleCentralManagerProtocol]()
     public private(set) var connectStatus: MKSwiftPeripheralConnectState = .unknown
     public private(set) var centralStatus: MKSwiftCentralManagerState = .unable
     
+    @MainActor private static var _sharedInstance: MKSwiftBleBaseCentralManager?
     private(set) var managerAction: MKSwiftCurrentAction = .default
     private var peripheralManager: MKSwiftBlePeripheralProtocol?
     private var centralManagerQueue: DispatchQueue
@@ -28,7 +27,6 @@ public class MKSwiftBleBaseCentralManager: NSObject {
     private var connectTimeout = false
     private var isConnecting = false
     private let operationQueue = OperationQueue()
-    private let queueAccessQueue = DispatchQueue(label: "com.mkble.operationQueue.access")
     
     private let defaultConnectTime: TimeInterval = 20.0
     
@@ -41,8 +39,15 @@ public class MKSwiftBleBaseCentralManager: NSObject {
         operationQueue.maxConcurrentOperationCount = 1
     }
     
+    public static var shared: MKSwiftBleBaseCentralManager {
+        if _sharedInstance == nil {
+            _sharedInstance = MKSwiftBleBaseCentralManager()
+        }
+        return _sharedInstance!
+    }
+    
     public static func singleDealloc() {
-        // In Swift, we don't need to manually dealloc singletons
+        _sharedInstance = nil
     }
     
     // MARK: - Public Methods
@@ -52,19 +57,15 @@ public class MKSwiftBleBaseCentralManager: NSObject {
     }
     
     public func loadDataManager(_ dataManager: MKSwiftBleCentralManagerProtocol) {
-        queueAccessQueue.sync {
-            if !self.managerList.contains(where: { $0 === dataManager }) {
-                self.managerList.append(dataManager)
-            }
+        if !self.managerList.contains(where: { $0 === dataManager }) {
+            self.managerList.append(dataManager)
         }
     }
     
     @discardableResult
     public func removeDataManager(_ dataManager: MKSwiftBleCentralManagerProtocol) -> Bool {
-        queueAccessQueue.sync {
-            if let index = self.managerList.firstIndex(where: { $0 === dataManager }) {
-                self.managerList.remove(at: index)
-            }
+        if let index = self.managerList.firstIndex(where: { $0 === dataManager }) {
+            self.managerList.remove(at: index)
         }
         return true
     }
@@ -85,10 +86,8 @@ public class MKSwiftBleBaseCentralManager: NSObject {
         
         managerAction = .scan
         
-        queueAccessQueue.sync {
-            self.managerList.forEach {
-                $0.centralManagerStartScan()
-            }
+        self.managerList.forEach {
+            $0.centralManagerStartScan()
         }
         
         centralManager.scanForPeripherals(withServices: services, options: options)
@@ -105,10 +104,8 @@ public class MKSwiftBleBaseCentralManager: NSObject {
         
         managerAction = .default
         
-        queueAccessQueue.sync {
-            self.managerList.forEach {
-                $0.centralManagerStopScan()
-            }
+        self.managerList.forEach {
+            $0.centralManagerStopScan()
         }
         
         return true
@@ -182,24 +179,20 @@ public class MKSwiftBleBaseCentralManager: NSObject {
     
     @discardableResult
     public func addOperation(_ operation: Operation & MKSwiftBleOperationProtocol) -> Bool {
-        return queueAccessQueue.sync {
-            guard !operationQueue.operations.contains(where: { $0 === operation }) else {
-                return false
-            }
-            operationQueue.addOperation(operation)
-            return true
+        guard !operationQueue.operations.contains(where: { $0 === operation }) else {
+            return false
         }
+        operationQueue.addOperation(operation)
+        return true
     }
     
     @discardableResult
     public func removeOperation(_ operation: Operation & MKSwiftBleOperationProtocol) -> Bool {
-        return queueAccessQueue.sync {
-            guard operationQueue.operations.contains(where: { $0 === operation }) else {
-                return false
-            }
-            operation.cancel()
-            return true
+        guard operationQueue.operations.contains(where: { $0 === operation }) else {
+            return false
         }
+        operation.cancel()
+        return true
     }
     
     // MARK: - Private Methods
@@ -208,11 +201,9 @@ public class MKSwiftBleBaseCentralManager: NSObject {
         let managerState: MKSwiftCentralManagerState = (centralManager.state == .poweredOn ? .enable : .unable)
         centralStatus = managerState
         
-        queueAccessQueue.sync {
-            NotificationCenter.default.post(name: .swiftCentralManagerStateChanged, object: nil)
-            self.managerList.forEach {
-                $0.centralManagerStateChanged(managerState)
-            }
+        NotificationCenter.default.post(name: .swiftCentralManagerStateChanged, object: nil)
+        self.managerList.forEach {
+            $0.centralManagerStateChanged(managerState)
         }
         
         if centralManager.state == .poweredOn {
@@ -293,9 +284,7 @@ public class MKSwiftBleBaseCentralManager: NSObject {
         
         updatePeripheralConnectState(.connectedFailed)
         
-        queueAccessQueue.sync {
-            self.connectFailBlock?(MKSwiftBleError.connectFailed)
-        }
+        self.connectFailBlock?(MKSwiftBleError.connectFailed)
     }
     
     private func connectPeripheralSuccess() {
@@ -304,21 +293,17 @@ public class MKSwiftBleBaseCentralManager: NSObject {
         resetOriSettings()
         updatePeripheralConnectState(.connected)
         
-        queueAccessQueue.sync {
-            if let peripheral = self.peripheralManager?.peripheral {
-                self.connectSucBlock?(peripheral)
-            }
+        if let peripheral = self.peripheralManager?.peripheral {
+            self.connectSucBlock?(peripheral)
         }
     }
     
     private func updatePeripheralConnectState(_ state: MKSwiftPeripheralConnectState) {
         connectStatus = state
         
-        queueAccessQueue.sync {
-            NotificationCenter.default.post(name: .swiftPeripheralConnectStateChanged, object: nil)
-            self.managerList.forEach {
-                $0.peripheralConnectStateChanged(state)
-            }
+        NotificationCenter.default.post(name: .swiftPeripheralConnectStateChanged, object: nil)
+        self.managerList.forEach {
+            $0.peripheralConnectStateChanged(state)
         }
     }
     
@@ -330,7 +315,7 @@ public class MKSwiftBleBaseCentralManager: NSObject {
 
 // MARK: - CBCentralManagerDelegate
 
-extension MKSwiftBleBaseCentralManager: CBCentralManagerDelegate {
+extension MKSwiftBleBaseCentralManager: @preconcurrency CBCentralManagerDelegate {
     public func centralManagerDidUpdateState(_ central: CBCentralManager) {
         updateCentralManagerState()
     }
@@ -341,12 +326,10 @@ extension MKSwiftBleBaseCentralManager: CBCentralManagerDelegate {
                               rssi RSSI: NSNumber) {
         guard RSSI.intValue != 127, !managerList.isEmpty else { return }
         
-        queueAccessQueue.sync {
-            self.managerList.forEach {
-                $0.centralManagerDiscoverPeripheral(peripheral,
-                                                    advertisementData: advertisementData,
-                                                    rssi: RSSI)
-            }
+        self.managerList.forEach {
+            $0.centralManagerDiscoverPeripheral(peripheral,
+                                                advertisementData: advertisementData,
+                                                rssi: RSSI)
         }
     }
     
@@ -383,7 +366,7 @@ extension MKSwiftBleBaseCentralManager: CBCentralManagerDelegate {
 
 // MARK: - CBPeripheralDelegate
 
-extension MKSwiftBleBaseCentralManager: CBPeripheralDelegate {
+extension MKSwiftBleBaseCentralManager: @preconcurrency CBPeripheralDelegate {
     public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard !connectTimeout,
               peripheralManager != nil,
@@ -439,46 +422,27 @@ extension MKSwiftBleBaseCentralManager: CBPeripheralDelegate {
     public func peripheral(_ peripheral: CBPeripheral,
                           didUpdateValueFor characteristic: CBCharacteristic,
                           error: Error?) {
-        // 安全获取 managerList 副本
-        let managers = queueAccessQueue.sync { managerList }
-        
-        queueAccessQueue.sync {
-            managers.forEach {
-                $0.peripheral(peripheral, didUpdateValueFor: characteristic, error: error)
-            }
-        }
-        
         guard error == nil else { return }
         
-        // 安全访问 operationQueue
-        queueAccessQueue.sync {
-            operationQueue.operations
-                .compactMap { $0 as? (Operation & MKSwiftBleOperationProtocol) }
-                .first { $0.isExecuting }?
-                .peripheral(peripheral, didUpdateValueFor: characteristic)
+        managerList.forEach {
+            $0.peripheral(peripheral, didUpdateValueFor: characteristic, error: error)
         }
+        operationQueue.operations
+            .compactMap { $0 as? (Operation & MKSwiftBleOperationProtocol) }
+            .first { $0.isExecuting }?
+            .peripheral(peripheral, didUpdateValueFor: characteristic)
     }
 
     public func peripheral(_ peripheral: CBPeripheral,
                           didWriteValueFor characteristic: CBCharacteristic,
                           error: Error?) {
-        // 安全获取 managerList 副本
-        let managers = queueAccessQueue.sync { managerList }
-        
-        queueAccessQueue.sync {
-            managers.forEach {
-                $0.peripheral(peripheral, didWriteValueFor: characteristic, error: error)
-            }
-        }
-        
         guard error == nil else { return }
-        
-        // 安全访问 operationQueue
-        queueAccessQueue.sync {
-            operationQueue.operations
-                .compactMap { $0 as? (Operation & MKSwiftBleOperationProtocol) }
-                .first { $0.isExecuting }?
-                .peripheral(peripheral, didWriteValueFor: characteristic)
+        managerList.forEach {
+            $0.peripheral(peripheral, didWriteValueFor: characteristic, error: error)
         }
+        operationQueue.operations
+            .compactMap { $0 as? (Operation & MKSwiftBleOperationProtocol) }
+            .first { $0.isExecuting }?
+            .peripheral(peripheral, didWriteValueFor: characteristic)
     }
 }

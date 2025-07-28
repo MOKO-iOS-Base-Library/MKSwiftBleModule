@@ -17,7 +17,7 @@ public class MKSwiftBleBaseCentralManager: NSObject {
     public private(set) var connectStatus: MKSwiftPeripheralConnectState = .unknown
     public private(set) var centralStatus: MKSwiftCentralManagerState = .unable
     
-    @MainActor private static var _sharedInstance: MKSwiftBleBaseCentralManager?
+    @MainActor public static let shared = MKSwiftBleBaseCentralManager()
     private(set) var managerAction: MKSwiftCurrentAction = .default
     private var peripheralManager: MKSwiftBlePeripheralProtocol?
     private var centralManagerQueue: DispatchQueue
@@ -37,17 +37,6 @@ public class MKSwiftBleBaseCentralManager: NSObject {
         super.init()
         centralManager = CBCentralManager(delegate: self, queue: centralManagerQueue)
         operationQueue.maxConcurrentOperationCount = 1
-    }
-    
-    @MainActor public static var shared: MKSwiftBleBaseCentralManager {
-        if _sharedInstance == nil {
-            _sharedInstance = MKSwiftBleBaseCentralManager()
-        }
-        return _sharedInstance!
-    }
-    
-    @MainActor public static func singleDealloc() {
-        _sharedInstance = nil
     }
     
     // MARK: - Public Methods

@@ -22,7 +22,8 @@ public extension String {
     }
 }
 
-public enum MKSwiftBleError: Error {
+public enum MKSwiftBleError: LocalizedError {
+    case unknown
     case bluetoothPowerOff
     case connectFailed
     case connecting
@@ -32,12 +33,14 @@ public enum MKSwiftBleError: Error {
     
     var localizedDescription: String {
         switch self {
+        case .unknown:
+            return "Unknow error"
         case .bluetoothPowerOff:
             return "Mobile phone bluetooth is currently unavailable"
         case .connectFailed:
             return "Connect Failed"
         case .connecting:
-            return "The devices are connectting"
+            return "The device is connectting"
         case .protocolError:
             return "The parameters passed in must conform to the protocol"
         case .paramsError:

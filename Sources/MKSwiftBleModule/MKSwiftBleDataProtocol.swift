@@ -1,16 +1,8 @@
-//
-//  File.swift
-//  MKSwiftBleModule
-//
-//  Created by aa on 2025/5/18.
-//
-
 import Foundation
-
 import CoreBluetooth
 
 // MARK: - 状态枚举
-public enum MKSwiftPeripheralConnectState {
+public enum MKSwiftPeripheralConnectState: Sendable {
     case unknown
     case connecting
     case connected
@@ -18,7 +10,7 @@ public enum MKSwiftPeripheralConnectState {
     case disconnect
 }
 
-public enum MKSwiftCentralManagerState {
+public enum MKSwiftCentralManagerState: Sendable {
     case unable
     case enable
 }
@@ -29,14 +21,10 @@ public extension Notification.Name {
     static let swiftCentralManagerStateChanged = Notification.Name("MKSwiftCentralManagerStateChangedNotification")
 }
 
-// MARK: - 回调类型
-typealias MKSwiftBleConnectFailedBlock = (Error) -> Void
-typealias MKSwiftBleConnectSuccessBlock = (CBPeripheral) -> Void
-
 // MARK: - 协议定义
 
 // 扫描协议
-public protocol MKSwiftBleScanProtocol: AnyObject {
+public protocol MKSwiftBleScanProtocol: AnyObject, Sendable {
     func centralManagerDiscoverPeripheral(_ peripheral: CBPeripheral,
                                         advertisementData: [String: Any],
                                         rssi: NSNumber)
@@ -52,7 +40,7 @@ extension MKSwiftBleScanProtocol {
 }
 
 // 状态协议
-public protocol MKSwiftBleCentralManagerStateProtocol: AnyObject {
+public protocol MKSwiftBleCentralManagerStateProtocol: AnyObject, Sendable {
     func centralManagerStateChanged(_ state: MKSwiftCentralManagerState)
     func peripheralConnectStateChanged(_ state: MKSwiftPeripheralConnectState)
 }
@@ -69,7 +57,7 @@ public protocol MKSwiftBleCentralManagerProtocol: MKSwiftBleScanProtocol, MKSwif
 }
 
 // 外设协议
-public protocol MKSwiftBlePeripheralProtocol: AnyObject {
+public protocol MKSwiftBlePeripheralProtocol: AnyObject, Sendable {
     var peripheral: CBPeripheral { get }
     func discoverServices()
     func discoverCharacteristics()
@@ -80,7 +68,7 @@ public protocol MKSwiftBlePeripheralProtocol: AnyObject {
 }
 
 // 操作协议
-public protocol MKSwiftBleOperationProtocol: AnyObject {
+public protocol MKSwiftBleOperationProtocol: AnyObject, Sendable {
     func peripheral(_ peripheral: CBPeripheral,
                    didUpdateValueFor characteristic: CBCharacteristic)
     

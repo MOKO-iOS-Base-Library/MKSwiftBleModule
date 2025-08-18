@@ -2,32 +2,32 @@ import Foundation
 import CoreBluetooth
 
 enum MKSwiftCurrentAction {
-    case `default`
+    case idle
     case scan
     case connecting
 }
 
-@MainActor  
-public final class MKSwiftBleBaseCentralManager: NSObject {
+ 
+@MainActor public final class MKSwiftBleBaseCentralManager: NSObject {
     
     public static let shared = MKSwiftBleBaseCentralManager()
     
     // MARK: - Properties
     
     public private(set) var centralManager: CBCentralManager!
-    @MainActor public private(set) var managerList = [MKSwiftBleCentralManagerProtocol]()
-    @MainActor public private(set) var connectStatus: MKSwiftPeripheralConnectState = .unknown
-    @MainActor public private(set) var centralStatus: MKSwiftCentralManagerState = .unable
+    public private(set) var currentManager: (any MKSwiftBleCentralManagerProtocol)?
+    public private(set) var connectStatus: MKSwiftPeripheralConnectState = .unknown
+    public private(set) var centralStatus: MKSwiftCentralManagerState = .unable
     
-    @MainActor private(set) var managerAction: MKSwiftCurrentAction = .default
-    @MainActor private var peripheralManager: MKSwiftBlePeripheralProtocol?
+    private(set) var managerAction: MKSwiftCurrentAction = .idle
+    private var peripheralManager: MKSwiftBlePeripheralProtocol?
     private var centralManagerQueue: DispatchQueue
-    @MainActor private var connectTimeout = false
-    @MainActor private var isConnecting = false
+    private var connectTimeout = false
+    private var isConnecting = false
     private let operationQueue = OperationQueue()
         
-    @MainActor private var timeoutTask: Task<Void, Never>?
-    @MainActor private var connectContinuation: CheckedContinuation<CBPeripheral, Error>?
+    private var timeoutTask: Task<Void, Never>?
+    private var connectContinuation: CheckedContinuation<CBPeripheral, Error>?
     
     // MARK: - Initialization
     
@@ -44,24 +44,19 @@ public final class MKSwiftBleBaseCentralManager: NSObject {
         peripheralManager?.peripheral
     }
     
-    @MainActor
-    public func loadDataManager(_ dataManager: MKSwiftBleCentralManagerProtocol) {
-        if !self.managerList.contains(where: { $0 === dataManager }) {
-            self.managerList.append(dataManager)
-        }
+    public func configCentralManager(_ dataManager: MKSwiftBleCentralManagerProtocol) {
+        currentManager = nil
+        currentManager = dataManager
     }
     
-    @MainActor
-    public func removeDataManager(_ dataManager: MKSwiftBleCentralManagerProtocol) {
-        if let index = self.managerList.firstIndex(where: { $0 === dataManager }) {
-            self.managerList.remove(at: index)
-        }
+    public func removeCentralManager() {
+        currentManager = nil
     }
     
     // MARK: - Scanning
     
     @discardableResult public func scanForPeripherals(withServices services: [CBUUID]?, options: [String: Any]? = nil) -> Bool {
-        if centralManager.state != .poweredOn || managerAction == .connecting {
+        if centralManager.state != .poweredOn || managerAction == .connecting || currentManager == nil {
             return false
         }
         
@@ -72,9 +67,7 @@ public final class MKSwiftBleBaseCentralManager: NSObject {
         managerAction = .scan
         
         DispatchQueue.main.async { [weak self] in
-            self?.managerList.forEach {
-                $0.centralManagerStartScan()
-            }
+            self?.currentManager?.centralManagerStartScan()
         }
         
         centralManager.scanForPeripherals(withServices: services, options: options)
@@ -82,19 +75,17 @@ public final class MKSwiftBleBaseCentralManager: NSObject {
     }
     
     @discardableResult public func stopScan() -> Bool {
-        if centralManager.state != .poweredOn || managerAction == .connecting {
+        if centralManager.state != .poweredOn || managerAction == .connecting || currentManager == nil {
             return false
         }
         if managerAction == .scan {
             centralManager.stopScan()
         }
         
-        managerAction = .default
+        managerAction = .idle
         
         DispatchQueue.main.async { [weak self] in
-            self?.managerList.forEach {
-                $0.centralManagerStopScan()
-            }
+            self?.currentManager?.centralManagerStopScan()
         }
         
         return true
@@ -161,7 +152,6 @@ public final class MKSwiftBleBaseCentralManager: NSObject {
     
     // MARK: - Private Methods
     
-    @MainActor
     private func updateCentralManagerState() {
         let stateCopy = centralManager.state == .poweredOn ? MKSwiftCentralManagerState.enable : .unable
         
@@ -171,8 +161,8 @@ public final class MKSwiftBleBaseCentralManager: NSObject {
             userInfo: ["state": stateCopy]
         )
         
-        managerList.forEach {
-            $0.centralManagerStateChanged(stateCopy)
+        if currentManager != nil {
+            currentManager?.centralManagerStateChanged(stateCopy)
         }
         
         centralStatus = stateCopy
@@ -182,7 +172,7 @@ public final class MKSwiftBleBaseCentralManager: NSObject {
         }
         
         switch managerAction {
-        case .default:
+        case .idle:
             if connectStatus == .connected {
                 updatePeripheralConnectState(.disconnect)
             }
@@ -215,26 +205,26 @@ public final class MKSwiftBleBaseCentralManager: NSObject {
             centralManager.cancelPeripheralConnection(existingPeripheral)
         }
         
+        // 重置状态
+        peripheralManager?.setNil()
+        peripheralManager = nil
+        peripheralManager = peripheralProtocol
+        managerAction = .connecting
+        
+        // 停止扫描
+        if centralManager.isScanning {
+            centralManager.stopScan()
+        }
+        
+        // 更新连接状态
+        updatePeripheralConnectState(.connecting)
+        
         return try await withCheckedThrowingContinuation { [weak self] continuation in
             guard let self = self else { return }
             
-            Task { @MainActor in
+            Task {@MainActor in
                 // 存储continuation
                 self.connectContinuation = continuation
-                
-                // 重置状态
-                self.peripheralManager?.setNil()
-                self.peripheralManager = nil
-                self.peripheralManager = peripheralProtocol
-                self.managerAction = .connecting
-                
-                // 停止扫描
-                if self.centralManager.isScanning {
-                    self.centralManager.stopScan()
-                }
-                
-                // 更新连接状态
-                self.updatePeripheralConnectState(.connecting)
                 
                 // 开始连接
                 self.centralManager.connect(peripheralProtocol.peripheral, options: nil)
@@ -257,17 +247,15 @@ public final class MKSwiftBleBaseCentralManager: NSObject {
         }
     }
     
-    @MainActor
     private func resetOriSettings() {
         timeoutTask?.cancel()
         timeoutTask = nil
-        managerAction = .default
+        managerAction = .idle
         connectContinuation = nil
         isConnecting = false
         connectTimeout = false
     }
     
-    @MainActor
     private func connectPeripheralFailed() {
         connectContinuation?.resume(throwing: MKSwiftBleError.connectFailed)
         resetOriSettings()
@@ -281,7 +269,6 @@ public final class MKSwiftBleBaseCentralManager: NSObject {
         updatePeripheralConnectState(.connectedFailed)
     }
     
-    @MainActor
     private func connectPeripheralSuccess() {
         guard !connectTimeout, peripheralManager != nil else { return }
         
@@ -293,21 +280,18 @@ public final class MKSwiftBleBaseCentralManager: NSObject {
         updatePeripheralConnectState(.connected)
     }
     
-    @MainActor
     private func updatePeripheralConnectState(_ state: MKSwiftPeripheralConnectState) {
         connectStatus = state
         NotificationCenter.default.post(name: .swiftPeripheralConnectStateChanged, object: nil)
-        self.managerList.forEach {
-            $0.peripheralConnectStateChanged(state)
-        }
+        currentManager?.peripheralConnectStateChanged(state)
     }
 }
 
 // MARK: - CBCentralManagerDelegate
 
-extension MKSwiftBleBaseCentralManager: @preconcurrency CBCentralManagerDelegate {
+@MainActor extension MKSwiftBleBaseCentralManager: @preconcurrency CBCentralManagerDelegate {
     public func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        Task { @MainActor [weak self] in
+        Task { [weak self] in
             self?.updateCentralManagerState()
         }
     }
@@ -316,14 +300,12 @@ extension MKSwiftBleBaseCentralManager: @preconcurrency CBCentralManagerDelegate
                               didDiscover peripheral: CBPeripheral,
                               advertisementData: [String: Any],
                               rssi RSSI: NSNumber) {
-        guard RSSI.intValue != 127, !managerList.isEmpty else { return }
+        guard RSSI.intValue != 127 else { return }
         
         DispatchQueue.main.async { [weak self] in
-            self?.managerList.forEach {
-                $0.centralManagerDiscoverPeripheral(peripheral,
+            self?.currentManager?.centralManagerDiscoverPeripheral(peripheral,
                                                   advertisementData: advertisementData,
                                                   rssi: RSSI)
-            }
         }
     }
     
@@ -342,7 +324,7 @@ extension MKSwiftBleBaseCentralManager: @preconcurrency CBCentralManagerDelegate
     public func centralManager(_ central: CBCentralManager,
                               didFailToConnect peripheral: CBPeripheral,
                               error: Error?) {
-        Task { @MainActor [weak self] in
+        Task { [weak self] in
             self?.connectPeripheralFailed()
         }
     }
@@ -354,7 +336,7 @@ extension MKSwiftBleBaseCentralManager: @preconcurrency CBCentralManagerDelegate
         guard connectStatus == .connected else { return }
         
         operationQueue.cancelAllOperations()
-        Task { @MainActor [weak self] in
+        Task { [weak self] in
             self?.peripheralManager?.setNil()
             self?.peripheralManager = nil
             self?.updatePeripheralConnectState(.disconnect)
@@ -373,7 +355,7 @@ extension MKSwiftBleBaseCentralManager: @preconcurrency CBPeripheralDelegate {
         }
         
         if error != nil {
-            Task { @MainActor [weak self] in
+            Task { [weak self] in
                 self?.connectPeripheralFailed()
             }
             return
@@ -393,7 +375,7 @@ extension MKSwiftBleBaseCentralManager: @preconcurrency CBPeripheralDelegate {
         }
         
         if error != nil {
-            Task { @MainActor [weak self] in
+            Task { [weak self] in
                 self?.connectPeripheralFailed()
             }
             return
@@ -401,7 +383,7 @@ extension MKSwiftBleBaseCentralManager: @preconcurrency CBPeripheralDelegate {
         
         peripheralManager?.updateCharacter(with: service)
         if peripheralManager?.connectSuccess == true {
-            Task { @MainActor [weak self] in
+            Task { [weak self] in
                 self?.connectPeripheralSuccess()
             }
         }
@@ -419,7 +401,7 @@ extension MKSwiftBleBaseCentralManager: @preconcurrency CBPeripheralDelegate {
         
         peripheralManager?.updateCurrentNotifySuccess(characteristic)
         if peripheralManager?.connectSuccess == true {
-            Task { @MainActor [weak self] in
+            Task { [weak self] in
                 self?.connectPeripheralSuccess()
             }
         }
@@ -431,9 +413,7 @@ extension MKSwiftBleBaseCentralManager: @preconcurrency CBPeripheralDelegate {
         guard error == nil else { return }
         
         DispatchQueue.main.async { [weak self] in
-            self?.managerList.forEach {
-                $0.peripheral(peripheral, didUpdateValueFor: characteristic, error: error)
-            }
+            self?.currentManager?.peripheral(peripheral, didUpdateValueFor: characteristic, error: error)
             self?.operationQueue.operations
                 .compactMap { $0 as? (Operation & MKSwiftBleOperationProtocol) }
                 .first { $0.isExecuting }?
@@ -446,9 +426,7 @@ extension MKSwiftBleBaseCentralManager: @preconcurrency CBPeripheralDelegate {
                           error: Error?) {
         guard error == nil else { return }
         DispatchQueue.main.async { [weak self] in
-            self?.managerList.forEach {
-                $0.peripheral(peripheral, didWriteValueFor: characteristic, error: error)
-            }
+            self?.currentManager?.peripheral(peripheral, didWriteValueFor: characteristic, error: error)
             self?.operationQueue.operations
                 .compactMap { $0 as? (Operation & MKSwiftBleOperationProtocol) }
                 .first { $0.isExecuting }?

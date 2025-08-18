@@ -8,7 +8,7 @@ enum MKSwiftCurrentAction {
 }
 
  
-@MainActor public final class MKSwiftBleBaseCentralManager: NSObject {
+@MainActor public class MKSwiftBleBaseCentralManager: NSObject {
     
     public static let shared = MKSwiftBleBaseCentralManager()
     

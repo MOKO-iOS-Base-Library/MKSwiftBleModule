@@ -33,9 +33,9 @@ enum MKSwiftCurrentAction {
     
     private override init() {
         centralManagerQueue = DispatchQueue(label: "moko.com.centralManager")
-        operationQueue.maxConcurrentOperationCount = 1
         super.init()
         centralManager = CBCentralManager(delegate: self, queue: centralManagerQueue)
+        operationQueue.maxConcurrentOperationCount = 1
     }
     
     // MARK: - Public Methods

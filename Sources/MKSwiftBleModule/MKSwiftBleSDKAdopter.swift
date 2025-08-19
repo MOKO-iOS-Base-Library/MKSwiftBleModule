@@ -30,6 +30,7 @@ public enum MKSwiftBleError: LocalizedError {
     case protocolError
     case paramsError
     case setParamsError
+    case timeout
     
     var localizedDescription: String {
         switch self {
@@ -47,6 +48,8 @@ public enum MKSwiftBleError: LocalizedError {
             return "Params error"
         case .setParamsError:
             return "Set parameter error"
+        case .timeout:
+            return "Connect timeout"
         }
     }
 }

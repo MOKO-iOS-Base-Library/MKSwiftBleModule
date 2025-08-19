@@ -1,5 +1,5 @@
 import Foundation
-import CoreBluetooth
+@preconcurrency import CoreBluetooth
 
 // MARK: - 状态枚举
 public enum MKSwiftPeripheralConnectState: Sendable {
@@ -15,6 +15,42 @@ public enum MKSwiftCentralManagerState: Sendable {
     case enable
 }
 
+public struct MKBleAdvInfo: Sendable {
+    public let localName: String?
+    public let serviceUUIDs: [CBUUID]?
+    public let serviceData: [CBUUID: Data]?
+    public let manufacturerData: Data?
+    public let txPowerLevel: Int?
+    public let isConnectable: Bool?
+    public let rssi: NSNumber
+    public let peripheralIdentifier: UUID
+    
+    public init(peripheralIdentifier: UUID,
+                advertisementData: [String: Any],
+                rssi: NSNumber) {
+        self.peripheralIdentifier = peripheralIdentifier
+        self.rssi = rssi  // NSNumber is immutable and thread-safe
+        
+        // Extract and properly handle advertisement data
+        self.localName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
+        
+        // Service UUIDs - CBUUID is immutable so we can use as-is
+        self.serviceUUIDs = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID]
+        
+        // Service Data - Data is value type so no need to copy
+        self.serviceData = advertisementData[CBAdvertisementDataServiceDataKey] as? [CBUUID: Data]
+        
+        // Manufacturer Data - Data is value type
+        self.manufacturerData = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data
+        
+        // TX Power Level - extract Int value from NSNumber
+        self.txPowerLevel = (advertisementData[CBAdvertisementDataTxPowerLevelKey] as? NSNumber)?.intValue
+        
+        // Connectable flag
+        self.isConnectable = advertisementData[CBAdvertisementDataIsConnectable] as? Bool
+    }
+}
+
 // MARK: - 通知名称
 public extension Notification.Name {
     static let swiftPeripheralConnectStateChanged = Notification.Name("MKSwiftPeripheralConnectStateChangedNotification")
@@ -26,8 +62,7 @@ public extension Notification.Name {
 // 扫描协议
 public protocol MKSwiftBleScanProtocol: AnyObject, Sendable {
     func centralManagerDiscoverPeripheral(_ peripheral: CBPeripheral,
-                                        advertisementData: [String: Any],
-                                        rssi: NSNumber)
+                                        advertisementData: MKBleAdvInfo)
     
     func centralManagerStartScan()
     func centralManagerStopScan()

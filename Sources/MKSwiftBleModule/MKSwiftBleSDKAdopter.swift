@@ -57,6 +57,11 @@ public enum MKSwiftBleError: LocalizedError {
 public class MKSwiftBleSDKAdopter {
     // MARK: - Hex/Decimal Conversions
     
+    /// 十六进制字符串转十进制正整数
+    /// - Parameters:
+    ///   - content: 十六进制字符串
+    ///   - range: 要转换的conten范围
+    /// - Returns: 十进制正整数
     public class func getDecimalWithHex(_ content: String, range: NSRange) -> Int {
         guard MKValidator.isValidString(content) else { return 0 }
         
@@ -75,11 +80,48 @@ public class MKSwiftBleSDKAdopter {
         return Int(strtoul(substring, nil, 16))
     }
     
+    /// 十六进制字符串转十进制正整数字符串
+    /// - Parameters:
+    ///   - content: 十六进制字符串
+    ///   - range: 要转换的conten范围
+    /// - Returns: 十进制正整数字符串
     public class func getDecimalStringWithHex(_ content: String, range: NSRange) -> String {
         let decimalValue = getDecimalWithHex(content, range: range)
         return "\(decimalValue)"
     }
     
+    /// 十六进制的Data转换为十进制正整数
+    /// - Parameters:
+    ///   - data: 十六进制的Data
+    ///   - range: 要转换的data范围
+    /// - Returns: 十进制正整数
+    public class func getDecimalFromData(_ data: Data, range: Range<Int>) -> Int {
+        guard !data.isEmpty else { return 0 }
+        guard range.lowerBound >= 0, range.upperBound <= data.count else { return 0 }
+        
+        let subdata = data.subdata(in: range)
+        var decimalValue = 0
+        
+        for byte in subdata {
+            decimalValue = decimalValue << 8 + Int(byte)
+        }
+        
+        return decimalValue
+    }
+    
+    /// 十六进制的Data转换为十进制正整数字符串
+    /// - Parameters:
+    ///   - data: 十六进制的Data
+    ///   - range: 要转换的data范围
+    /// - Returns: 十进制正整数字符串
+    public class func getDecimalStringFromData(_ data: Data, range: Range<Int>) -> String {
+        let decimalValue = getDecimalFromData(data, range: range)
+        return "\(decimalValue)"
+    }
+    
+    /// 有符号10进制转16进制字符串
+    /// - Parameter number: 带符号的10进制数
+    /// - Returns: 十六进制字符串
     public class func hexStringFromSignedNumber(_ number: Int) -> String {
         var tempNumber = String(format: "%lX", number)
         if tempNumber.count == 1 {
@@ -90,46 +132,50 @@ public class MKSwiftBleSDKAdopter {
         return hexStringFromData(resultData)
     }
     
-    public class func signedHexTurnString(_ content: String) -> NSNumber {
-        guard MKValidator.isValidString(content) else { return 0 }
+    /// 带符号的十六进制字符串转十进制数字
+    /// - Parameter content: 带符号的十六进制字符串
+    /// - Returns: 转换的十进制数据
+    public class func signedHexTurnToInt(_ content: String) -> Int {
+        guard !content.isEmpty else { return 0 }
         
-        let tempData = stringToData(content)
-        let length = tempData.count
-        let maxHexString = headString("F", trilString: "F", strLenth: length)
-        let centerHexString = headString("8", trilString: "0", strLenth: length)
+        // 将十六进制字符串转换为 UInt64（无符号）
+        guard let unsignedValue = UInt64(content, radix: 16) else { return 0 }
         
-        if (numberHexString(content).int64Value - numberHexString(centerHexString).int64Value) < 0 {
-            return numberHexString(content)
+        let bitLength = content.count * 4 // 每个十六进制字符占4位
+        let maxUnsignedValue = UInt64(1) << bitLength
+        
+        // 检查最高位是否为1（负数）
+        if unsignedValue & (1 << (bitLength - 1)) != 0 {
+            // 负数：进行补码转换
+            return Int(Int64(unsignedValue) - Int64(maxUnsignedValue))
+        } else {
+            // 正数：直接转换
+            return Int(unsignedValue)
         }
-        
-        let maxValue = numberHexString(content).int64Value
-        let minValue = numberHexString(maxHexString).int64Value
-        return NSNumber(value: maxValue - minValue - 1)
     }
     
-    // MARK: - CRC and Data Conversions
-    
-    public class func getCrc16VerifyCode(_ data: Data) -> Data {
-        guard MKValidator.isValidData(data) else { return Data() }
+    /// 带符号的十六进制的Data转换为十进制数字
+    /// - Parameter data: 带符号的十六进制的Data
+    /// - Returns: 十进制数字
+    public class func signedDataTurnToInt(_ data: Data) -> Int {
+        guard !data.isEmpty else { return 0 }
         
-        var crcWord: UInt16 = 0xffff
-        let bytes = [UInt8](data)
-        
-        for byte in bytes {
-            crcWord ^= UInt16(byte) & 0x00ff
-            for _ in 0..<8 {
-                if (crcWord & 0x0001) == 1 {
-                    crcWord >>= 1
-                    crcWord ^= 0xA001
-                } else {
-                    crcWord >>= 1
-                }
-            }
+        switch data.count {
+        case 1:
+            return Int(Int8(bitPattern: data[0]))
+        case 2:
+            let value = data.withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
+            return Int(Int16(bitPattern: value))
+        case 4:
+            let value = data.withUnsafeBytes { $0.load(as: UInt32.self).bigEndian }
+            return Int(Int32(bitPattern: value))
+        case 8:
+            let value = data.withUnsafeBytes { $0.load(as: UInt64.self).bigEndian }
+            return Int(Int64(bitPattern: value))
+        default:
+            // 对于其他长度，使用通用方法
+            return signedDataTurnToIntGeneric(data)
         }
-        
-        let crcL = UInt8(0xff & (crcWord >> 8))
-        let crcH = UInt8(0xff & crcWord)
-        return Data([crcH, crcL])
     }
     
     public class func hexStringFromData(_ sourceData: Data) -> String {
@@ -281,6 +327,27 @@ public class MKSwiftBleSDKAdopter {
     }
     
     // MARK: - Private Methods
+    
+    private class func signedDataTurnToIntGeneric(_ data: Data) -> Int {
+        var unsignedValue: UInt64 = 0
+        let bitLength = data.count * 8
+        
+        // 大端序处理
+        for byte in data {
+            unsignedValue = unsignedValue << 8 + UInt64(byte)
+        }
+        
+        let signBitMask: UInt64 = 1 << (bitLength - 1)
+        
+        if unsignedValue & signBitMask == 0 {
+            // 正数
+            return Int(unsignedValue)
+        } else {
+            // 负数：计算补码
+            let maxValue: UInt64 = 1 << bitLength
+            return Int(Int64(unsignedValue) - Int64(maxValue))
+        }
+    }
     
     private class func numberHexString(_ aHexString: String) -> NSNumber {
         guard !aHexString.isEmpty else { return 0 }

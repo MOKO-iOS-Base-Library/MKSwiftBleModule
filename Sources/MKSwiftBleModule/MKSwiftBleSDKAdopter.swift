@@ -32,10 +32,10 @@ public enum MKSwiftBleError: LocalizedError {
     case setParamsError
     case timeout
     
-    var localizedDescription: String {
+    public var errorDescription: String? {
         switch self {
         case .unknown:
-            return "Unknow error"
+            return "Unknown error"
         case .bluetoothPowerOff:
             return "Mobile phone bluetooth is currently unavailable"
         case .connectFailed:
@@ -54,7 +54,7 @@ public enum MKSwiftBleError: LocalizedError {
     }
 }
 
-public class MKSwiftBleSDKAdopter {
+public enum MKSwiftBleSDKAdopter {
     // MARK: - Hex/Decimal Conversions
     
     /// 十六进制字符串转十进制正整数
@@ -62,7 +62,7 @@ public class MKSwiftBleSDKAdopter {
     ///   - content: 十六进制字符串
     ///   - range: 要转换的conten范围
     /// - Returns: 十进制正整数
-    public class func getDecimalWithHex(_ content: String, range: NSRange) -> Int {
+    public static func getDecimalWithHex(_ content: String, range: NSRange) -> Int {
         guard MKValidator.isValidString(content) else { return 0 }
         
         for i in 0..<content.count {
@@ -85,7 +85,7 @@ public class MKSwiftBleSDKAdopter {
     ///   - content: 十六进制字符串
     ///   - range: 要转换的conten范围
     /// - Returns: 十进制正整数字符串
-    public class func getDecimalStringWithHex(_ content: String, range: NSRange) -> String {
+    public static func getDecimalStringWithHex(_ content: String, range: NSRange) -> String {
         let decimalValue = getDecimalWithHex(content, range: range)
         return "\(decimalValue)"
     }
@@ -95,7 +95,7 @@ public class MKSwiftBleSDKAdopter {
     ///   - data: 十六进制的Data
     ///   - range: 要转换的data范围
     /// - Returns: 十进制正整数
-    public class func getDecimalFromData(_ data: Data, range: Range<Int>) -> Int {
+    public static func getDecimalFromData(_ data: Data, range: Range<Int>) -> Int {
         guard !data.isEmpty else { return 0 }
         guard range.lowerBound >= 0, range.upperBound <= data.count else { return 0 }
         
@@ -114,7 +114,7 @@ public class MKSwiftBleSDKAdopter {
     ///   - data: 十六进制的Data
     ///   - range: 要转换的data范围
     /// - Returns: 十进制正整数字符串
-    public class func getDecimalStringFromData(_ data: Data, range: Range<Int>) -> String {
+    public static func getDecimalStringFromData(_ data: Data, range: Range<Int>) -> String {
         let decimalValue = getDecimalFromData(data, range: range)
         return "\(decimalValue)"
     }
@@ -122,7 +122,7 @@ public class MKSwiftBleSDKAdopter {
     /// 有符号10进制转16进制字符串
     /// - Parameter number: 带符号的10进制数
     /// - Returns: 十六进制字符串
-    public class func hexStringFromSignedNumber(_ number: Int) -> String {
+    public static func hexStringFromSignedNumber(_ number: Int) -> String {
         var tempNumber = String(format: "%lX", number)
         if tempNumber.count == 1 {
             tempNumber = "0" + tempNumber
@@ -135,7 +135,7 @@ public class MKSwiftBleSDKAdopter {
     /// 带符号的十六进制字符串转十进制数字
     /// - Parameter content: 带符号的十六进制字符串
     /// - Returns: 转换的十进制数据
-    public class func signedHexTurnToInt(_ content: String) -> Int {
+    public static func signedHexTurnToInt(_ content: String) -> Int {
         guard !content.isEmpty else { return 0 }
         
         // 将十六进制字符串转换为 UInt64（无符号）
@@ -157,7 +157,7 @@ public class MKSwiftBleSDKAdopter {
     /// 带符号的十六进制的Data转换为十进制数字
     /// - Parameter data: 带符号的十六进制的Data
     /// - Returns: 十进制数字
-    public class func signedDataTurnToInt(_ data: Data) -> Int {
+    public static func signedDataTurnToInt(_ data: Data) -> Int {
         guard !data.isEmpty else { return 0 }
         
         switch data.count {
@@ -178,7 +178,7 @@ public class MKSwiftBleSDKAdopter {
         }
     }
     
-    public class func hexStringFromData(_ sourceData: Data) -> String {
+    public static func hexStringFromData(_ sourceData: Data) -> String {
         guard MKValidator.isValidData(sourceData) else { return "" }
         
         var hexStr = ""
@@ -195,7 +195,7 @@ public class MKSwiftBleSDKAdopter {
     /// Converts a hexadecimal string to `Data`.
     /// - Note: Supports both even and odd-length strings (e.g., "A1B2" or "ABC").
     /// - Returns: Empty `Data` if the input string is invalid.
-    public class func stringToData(_ hexString: String) -> Data {
+    public static func stringToData(_ hexString: String) -> Data {
         guard MKValidator.isValidString(hexString) else { return Data() }
         
         let chunkSize = hexString.count % 2 == 0 ? 2 : 1
@@ -218,7 +218,7 @@ public class MKSwiftBleSDKAdopter {
     
     // MARK: - Validation Methods
     
-    public class func checkHexCharacter(_ character: String) -> Bool {
+    public static func checkHexCharacter(_ character: String) -> Bool {
         guard MKValidator.isValidString(character) else { return false }
         
         let regex = "[a-fA-F0-9]*"
@@ -226,7 +226,7 @@ public class MKSwiftBleSDKAdopter {
         return pred.evaluate(with: character)
     }
     
-    public class func binaryByhex(_ hex: String) -> String {
+    public static func binaryByhex(_ hex: String) -> String {
         guard MKValidator.isValidString(hex), checkHexCharacter(hex) else { return "" }
         
         var hexString = hex
@@ -255,13 +255,13 @@ public class MKSwiftBleSDKAdopter {
         return binaryString
     }
     
-    public class func asciiString(_ content: String) -> Bool {
+    public static func asciiString(_ content: String) -> Bool {
         let strlen = content.count
         let datalen = content.data(using: .utf8)?.count ?? 0
         return strlen == datalen
     }
     
-    public class func isUUIDString(_ uuid: String) -> Bool {
+    public static func isUUIDString(_ uuid: String) -> Bool {
         let uuidPatternString = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
         let regex = try? NSRegularExpression(pattern: uuidPatternString, options: .caseInsensitive)
         let numberOfMatches = regex?.numberOfMatches(in: uuid, options: [], range: NSRange(location: 0, length: uuid.count)) ?? 0
@@ -270,8 +270,9 @@ public class MKSwiftBleSDKAdopter {
     
     // MARK: - Binary/Hex Conversions
     
-    public class func getHexByBinary(_ binary: String) -> String {
-        guard MKValidator.isValidString(binary), checkHexCharacter(binary) else { return "" }
+    public static func getHexByBinary(_ binary: String) -> String {
+        guard MKValidator.isValidString(binary),
+              binary.allSatisfy({ $0 == "0" || $0 == "1" }) else { return "" }
         
         let binaryDic: [String: String] = [
             "0000": "0", "0001": "1", "0010": "2",
@@ -313,10 +314,10 @@ public class MKSwiftBleSDKAdopter {
         return tempString
     }
     
-    public class func fetchHexValue(_ value: Int, byteLen len: Int) -> String {
+    public static func fetchHexValue(_ value: UInt, byteLen len: Int) -> String {
         if len <= 0 { return "" }
         
-        var valueString = String(format: "%1lx", value)
+        var valueString = String(format: "%lx", value)
         let needLen = 2 * len - valueString.count
         
         if needLen > 0 {
@@ -326,9 +327,37 @@ public class MKSwiftBleSDKAdopter {
         return valueString
     }
     
+    // MARK: - CRC
+    
+    /// 获取CRC16校验码
+    /// - Parameter data: 原始数据
+    /// - Returns: CRC16校验码 (Data, 2 bytes: High, Low)
+    public static func getCrc16VerifyCode(_ data: Data) -> Data {
+        guard !data.isEmpty else { return Data() }
+        
+        var crcWord: UInt16 = 0xFFFF
+        
+        for byte in data {
+            crcWord ^= UInt16(byte) & 0x00FF
+            for _ in 0..<8 {
+                if (crcWord & 0x0001) == 1 {
+                    crcWord >>= 1
+                    crcWord ^= 0xA001
+                } else {
+                    crcWord >>= 1
+                }
+            }
+        }
+        
+        let crcL = UInt8((crcWord >> 8) & 0xFF)
+        let crcH = UInt8(crcWord & 0xFF)
+        
+        return Data([crcH, crcL])
+    }
+    
     // MARK: - Private Methods
     
-    private class func signedDataTurnToIntGeneric(_ data: Data) -> Int {
+    private static func signedDataTurnToIntGeneric(_ data: Data) -> Int {
         var unsignedValue: UInt64 = 0
         let bitLength = data.count * 8
         
@@ -349,7 +378,7 @@ public class MKSwiftBleSDKAdopter {
         }
     }
     
-    private class func numberHexString(_ aHexString: String) -> NSNumber {
+    private static func numberHexString(_ aHexString: String) -> NSNumber {
         guard !aHexString.isEmpty else { return 0 }
         
         var longlongValue: UInt64 = 0
@@ -357,7 +386,7 @@ public class MKSwiftBleSDKAdopter {
         return NSNumber(value: longlongValue)
     }
     
-    private class func headString(_ headStr: String, trilString trilStr: String, strLenth lenth: Int) -> String {
+    private static func headString(_ headStr: String, trilString trilStr: String, strLenth lenth: Int) -> String {
         guard !headStr.isEmpty, !trilStr.isEmpty else { return "" }
         
         var string = "0x\(headStr)"

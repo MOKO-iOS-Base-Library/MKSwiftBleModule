@@ -9,7 +9,23 @@ enum MKSwiftCurrentAction: Sendable {
 
 // MARK: - Main Central Manager Implementation
 public final class MKSwiftBleBaseCentralManager: NSObject, @unchecked Sendable {
-    public static let shared = MKSwiftBleBaseCentralManager()
+    private static var _shared: MKSwiftBleBaseCentralManager?
+    private static let sharedLock = NSLock()
+
+    public static var shared: MKSwiftBleBaseCentralManager {
+        sharedLock.lock()
+        defer { sharedLock.unlock() }
+        if let s = _shared { return s }
+        let s = MKSwiftBleBaseCentralManager()
+        _shared = s
+        return s
+    }
+
+    public static func singleDealloc() {
+        sharedLock.lock()
+        defer { sharedLock.unlock() }
+        _shared = nil
+    }
     
     // MARK: - Thread-Safe State Container
     
@@ -28,37 +44,37 @@ public final class MKSwiftBleBaseCentralManager: NSObject, @unchecked Sendable {
         // Thread-safe accessors
         var connectStatus: MKSwiftPeripheralConnectState {
             get { queue.sync { _connectStatus } }
-            set { queue.async(flags: .barrier) { self._connectStatus = newValue } }
+            set { queue.sync(flags: .barrier) { self._connectStatus = newValue } }
         }
         
         var centralStatus: MKSwiftCentralManagerState {
             get { queue.sync { _centralStatus } }
-            set { queue.async(flags: .barrier) { self._centralStatus = newValue } }
+            set { queue.sync(flags: .barrier) { self._centralStatus = newValue } }
         }
         
         var managerAction: MKSwiftCurrentAction {
             get { queue.sync { _managerAction } }
-            set { queue.async(flags: .barrier) { self._managerAction = newValue } }
+            set { queue.sync(flags: .barrier) { self._managerAction = newValue } }
         }
         
         var isConnecting: Bool {
             get { queue.sync { _isConnecting } }
-            set { queue.async(flags: .barrier) { self._isConnecting = newValue } }
+            set { queue.sync(flags: .barrier) { self._isConnecting = newValue } }
         }
         
         var connectTimeout: Bool {
             get { queue.sync { _connectTimeout } }
-            set { queue.async(flags: .barrier) { self._connectTimeout = newValue } }
+            set { queue.sync(flags: .barrier) { self._connectTimeout = newValue } }
         }
         
         var peripheralManager: (any MKSwiftBlePeripheralProtocol & Sendable)? {
             get { queue.sync { _peripheralManager } }
-            set { queue.async(flags: .barrier) { self._peripheralManager = newValue } }
+            set { queue.sync(flags: .barrier) { self._peripheralManager = newValue } }
         }
         
         var currentManager: (any MKSwiftBleCentralManagerProtocol & Sendable)? {
             get { queue.sync { _currentManager } }
-            set { queue.async(flags: .barrier) { self._currentManager = newValue } }
+            set { queue.sync(flags: .barrier) { self._currentManager = newValue } }
         }
     }
     
@@ -144,67 +160,47 @@ public final class MKSwiftBleBaseCentralManager: NSObject, @unchecked Sendable {
     
     @discardableResult
     public func scanForPeripherals(withServices services: [CBUUID]?, options: [String: Any]? = nil) -> Bool {
-        guard centralManager.state == .poweredOn,
-              !isConnecting,
-              currentManager != nil else {
+        guard centralManager.state == .poweredOn else {
             return false
         }
-        
+
         if managerAction == .scan {
-            centralManager.stopScan()
-        }
-        
-        managerAction = .scan
-        
-        // Convert to known-safe options at call site
-        let knownOptions = extractKnownScanOptions(from: options)
-        
-        centralManagerQueue.async {
-            // Reconstruct the dictionary just before use
-            var cbOptions: [String: Any]? = nil
-            if let knownOptions = knownOptions {
-                cbOptions = [String: Any]()
-                if let allowDuplicates = knownOptions.allowDuplicates {
-                    cbOptions?[CBCentralManagerScanOptionAllowDuplicatesKey] = allowDuplicates
-                }
-                if let solicitedServices = knownOptions.solicitedServiceUUIDs {
-                    cbOptions?[CBCentralManagerScanOptionSolicitedServiceUUIDsKey] = solicitedServices
-                }
+            centralManagerQueue.async {
+                self.centralManager.stopScan()
             }
-            
-            self.centralManager.scanForPeripherals(
-                withServices: services,
-                options: cbOptions
-            )
+        } else if managerAction == .connecting {
+            connectPeripheralFailed()
         }
-        
+
+        managerAction = .scan
+
+        centralManagerQueue.async {
+            self.centralManager.scanForPeripherals(withServices: services, options: options)
+        }
+
         DispatchQueue.main.async { [weak self] in
             self?.currentManager?.centralManagerStartScan()
         }
-        
+
         return true
     }
     
     @discardableResult
     public func stopScan() -> Bool {
-        guard centralManager.state == .poweredOn,
-              !isConnecting,
-              currentManager != nil else {
-            return false
-        }
-        
         if managerAction == .scan {
             centralManagerQueue.async {
                 self.centralManager.stopScan()
             }
+        } else if managerAction == .connecting {
+            connectPeripheralFailed()
         }
-        
+
         managerAction = .idle
-        
+
         DispatchQueue.main.async { [weak self] in
             self?.currentManager?.centralManagerStopScan()
         }
-        
+
         return true
     }
     
@@ -280,18 +276,18 @@ public final class MKSwiftBleBaseCentralManager: NSObject, @unchecked Sendable {
     
     private func updateCentralManagerState() {
         let stateCopy = centralManager.state == .poweredOn ? MKSwiftCentralManagerState.enable : .unable
-        
-        NotificationCenter.default.post(
-            name: .swiftCentralManagerStateChanged,
-            object: nil,
-            userInfo: ["state": stateCopy]
-        )
-        
+
         centralStatus = stateCopy
+
         DispatchQueue.main.async { [weak self] in
+            NotificationCenter.default.post(
+                name: .swiftCentralManagerStateChanged,
+                object: nil,
+                userInfo: ["state": stateCopy]
+            )
             self?.currentManager?.centralManagerStateChanged(stateCopy)
         }
-        
+
         guard centralManager.state == .poweredOn else {
             handleBluetoothPoweredOff()
             return
@@ -299,21 +295,19 @@ public final class MKSwiftBleBaseCentralManager: NSObject, @unchecked Sendable {
     }
     
     private func handleBluetoothPoweredOff() {
-        switch connectStatus {
-        case .connected:
-            updatePeripheralConnectState(.disconnect)
-            peripheralManager = nil
-        default:
-            break
-        }
-        
         switch managerAction {
+        case .idle:
+            if connectStatus == .connected {
+                updatePeripheralConnectState(.disconnect)
+            }
+            if peripheralManager != nil {
+                peripheralManager?.setNil()
+                peripheralManager = nil
+            }
         case .scan:
             stopScan()
         case .connecting:
             connectPeripheralFailed()
-        case .idle:
-            break
         }
     }
     
@@ -321,45 +315,46 @@ public final class MKSwiftBleBaseCentralManager: NSObject, @unchecked Sendable {
         guard centralManager.state == .poweredOn else {
             throw MKSwiftBleError.bluetoothPowerOff
         }
-        
+
         if isConnecting {
             throw MKSwiftBleError.connecting
         }
-        
+
         isConnecting = true
-        
+
         // Cancel existing connection if any
         if let existingPeripheral = peripheralManager?.peripheral {
             centralManagerQueue.async {
                 self.centralManager.cancelPeripheralConnection(existingPeripheral)
             }
+            peripheralManager?.setNil()
         }
-        
+
         // Reset state
         peripheralManager = peripheralProtocol
         managerAction = .connecting
-        
+
         // Stop scanning if needed
         if centralManager.isScanning {
             centralManagerQueue.async {
                 self.centralManager.stopScan()
             }
         }
-        
+
         // Update connection state
         updatePeripheralConnectState(.connecting)
-        
+
         return try await withCheckedThrowingContinuation { continuation in
             connectContinuation = continuation
-            
+
             centralManagerQueue.async {
                 self.centralManager.connect(peripheralProtocol.peripheral, options: nil)
             }
-            
-            // Start timeout
+
+            // Start timeout (40s, matching OC defaultConnectTime)
             self.timeoutTask = Task { [weak self] in
                 do {
-                    try await Task.sleep(nanoseconds: 20 * 1_000_000_000)
+                    try await Task.sleep(nanoseconds: 40 * 1_000_000_000)
                     await self?.handleConnectTimeout()
                 } catch {
                     // Task was cancelled
@@ -369,14 +364,8 @@ public final class MKSwiftBleBaseCentralManager: NSObject, @unchecked Sendable {
     }
     
     private func handleConnectTimeout() async {
-        if !connectTimeout {
-            connectTimeout = true
-        }
-        
-        connectContinuation?.resume(throwing: MKSwiftBleError.connectFailed)
-        connectContinuation = nil
-        
-        resetOriSettings()
+        connectTimeout = true
+        connectPeripheralFailed()
     }
     
     private func resetOriSettings() {
@@ -389,56 +378,43 @@ public final class MKSwiftBleBaseCentralManager: NSObject, @unchecked Sendable {
     }
     
     private func connectPeripheralFailed() {
-        connectContinuation?.resume(throwing: MKSwiftBleError.connectFailed)
-        connectContinuation = nil
-        
         resetOriSettings()
-        
+
         if let peripheral = peripheralManager?.peripheral {
             centralManagerQueue.async {
                 self.centralManager.cancelPeripheralConnection(peripheral)
             }
         }
-        
+
+        peripheralManager?.setNil()
         peripheralManager = nil
         updatePeripheralConnectState(.connectedFailed)
+
+        connectContinuation?.resume(throwing: MKSwiftBleError.connectFailed)
+        connectContinuation = nil
     }
     
     private func connectPeripheralSuccess() {
         guard !connectTimeout, peripheralManager != nil else { return }
-        
+
+        resetOriSettings()
+        updatePeripheralConnectState(.connected)
+
         if let peripheral = peripheralManager?.peripheral {
             connectContinuation?.resume(returning: peripheral)
             connectContinuation = nil
         }
-        
-        resetOriSettings()
-        updatePeripheralConnectState(.connected)
     }
     
     private func updatePeripheralConnectState(_ state: MKSwiftPeripheralConnectState) {
         connectStatus = state
-        
-        NotificationCenter.default.post(name: .swiftPeripheralConnectStateChanged, object: nil)
-        
+
         DispatchQueue.main.async { [weak self] in
+            NotificationCenter.default.post(name: .swiftPeripheralConnectStateChanged, object: nil)
             self?.currentManager?.peripheralConnectStateChanged(state)
         }
     }
     
-    private struct KnownScanOptions: Sendable {
-        let allowDuplicates: Bool?
-        let solicitedServiceUUIDs: [CBUUID]?
-    }
-
-    private func extractKnownScanOptions(from options: [String: Any]?) -> KnownScanOptions? {
-        guard let options = options else { return nil }
-        
-        return KnownScanOptions(
-            allowDuplicates: options[CBCentralManagerScanOptionAllowDuplicatesKey] as? Bool,
-            solicitedServiceUUIDs: options[CBCentralManagerScanOptionSolicitedServiceUUIDsKey] as? [CBUUID]
-        )
-    }
 }
 
 // MARK: - CBCentralManagerDelegate
@@ -487,8 +463,9 @@ extension MKSwiftBleBaseCentralManager: CBCentralManagerDelegate {
                              error: Error?) {
         print("---------->The peripheral is disconnected")
         guard connectStatus == .connected else { return }
-        
+
         operationQueue.cancelAllOperations()
+        peripheralManager?.setNil()
         peripheralManager = nil
         updatePeripheralConnectState(.disconnect)
     }
@@ -551,13 +528,14 @@ extension MKSwiftBleBaseCentralManager: CBPeripheralDelegate {
     public func peripheral(_ peripheral: CBPeripheral,
                          didUpdateValueFor characteristic: CBCharacteristic,
                          error: Error?) {
+        DispatchQueue.main.async { [weak self] in
+            self?.currentManager?.peripheral(peripheral, didUpdateValueFor: characteristic, error: error)
+        }
+
         guard error == nil else { return }
-        
+
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            
-            self.currentManager?.peripheral(peripheral, didUpdateValueFor: characteristic, error: error)
-            
             self.operationQueue.operations
                 .compactMap { $0 as? (Operation & MKSwiftBleOperationProtocol & Sendable) }
                 .first { $0.isExecuting }?
@@ -568,13 +546,14 @@ extension MKSwiftBleBaseCentralManager: CBPeripheralDelegate {
     public func peripheral(_ peripheral: CBPeripheral,
                          didWriteValueFor characteristic: CBCharacteristic,
                          error: Error?) {
+        DispatchQueue.main.async { [weak self] in
+            self?.currentManager?.peripheral(peripheral, didWriteValueFor: characteristic, error: error)
+        }
+
         guard error == nil else { return }
-        
+
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            
-            self.currentManager?.peripheral(peripheral, didWriteValueFor: characteristic, error: error)
-            
             self.operationQueue.operations
                 .compactMap { $0 as? (Operation & MKSwiftBleOperationProtocol & Sendable) }
                 .first { $0.isExecuting }?

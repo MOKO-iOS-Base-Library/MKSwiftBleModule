@@ -7,7 +7,7 @@
 
 import Foundation
 
-public class MKSwiftBleLogManager {
+public final class MKSwiftBleLogManager {
     
     // MARK: - Private Properties
     

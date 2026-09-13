@@ -9,7 +9,7 @@ enum MKSwiftCurrentAction: Sendable {
 
 // MARK: - Main Central Manager Implementation
 public final class MKSwiftBleBaseCentralManager: NSObject, @unchecked Sendable {
-    private static var _shared: MKSwiftBleBaseCentralManager?
+    private nonisolated(unsafe) static var _shared: MKSwiftBleBaseCentralManager?
     private static let sharedLock = NSLock()
 
     public static var shared: MKSwiftBleBaseCentralManager {
